@@ -147,6 +147,21 @@ public class Mutiworms extends GraphicsProgram {
        displayTeam();
    }
 
+   public void lose(Person loser) {
+       removeAll();
+       GLabel finalMessage;
+       if (loser == redHuman) {
+           finalMessage = new GLabel("Blue Player Wins!");
+           finalMessage.setColor(Color.blue);
+       } else {
+           finalMessage = new GLabel("Red Player Wins!");
+           finalMessage.setColor(Color.red);
+       }
+       finalMessage.setFont(new Font("Serif", Font.BOLD, 120));
+       finalMessage.setLocation(this.getWidth()/2 - finalMessage.getWidth()/2, this.getHeight()/2 - finalMessage.getHeight()/2);
+       add(finalMessage);
+   }
+
    private void createBlue(double playerHeight) {
        blueHuman = new Person(false, playerHeight);
        blueHuman.setColor(Color.blue);
@@ -187,12 +202,86 @@ public class Mutiworms extends GraphicsProgram {
            add(blueTeamName);
        }
    }
-   class Treasure extends GRect
-   {
+
+    class Bomb extends GRect implements Shootable {
+
+        private Person target;
+
+        public Bomb(Person shooter) {
+            super(playerHeight * .68, playerHeight * .68);
+            double xpos = shooter.getX();
+            move(xpos, groundLevel);
+            if (shooter == redHuman) {
+                target = blueHuman;
+            } else {
+                target = redHuman;
+            }
+            add(this);
+        }
+
+        public boolean getTeam() {
+            return true;
+        }
+
+        public void shootThis(int xMag, int yMag) {
+
+            Timer timer = new Timer(5, new ActionListener() {
+
+                //Just enough to go across the map with the largest drag
+                double yVel = yMag * yVelocityFactor * .24;
+                double xVel = xMag * xVelocityFactor * .24;
+
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    double xDist = xVel / 5;
+                    double yDist = yVel / -5;
+                    yVel = yVel - (int) (yAccel / 10);
+                    move(xDist, yDist);
+                    repaint();
+                    try {
+                        if ((Bomb.this.getY() > target.getY() && Bomb.this.getY() < (target.getY() + playerHeight)) || (Bomb.this.getY() + (playerHeight*.68)) > target.getY() && Bomb.this.getY() < (target.getY() + playerHeight)) {
+                            if ((Bomb.this.getX() > target.getX() && Bomb.this.getX() < (target.getX() + playerHeight)) || (Bomb.this.getX() + (playerHeight * .68)) > target.getX() && Bomb.this.getX() < (target.getX() + playerHeight)) {
+
+                                int temp = target.changeHP(-40);
+                                remove(Bomb.this);
+                                ((Timer) e.getSource()).stop();
+                                switchTeam();
+                                System.out.println("bombed");
+                                if (temp == 1) {
+                                    lose(target);
+                                } else {}
+
+                            }
+                        }
+
+                    } catch (Exception error) {
+                    }
+                    if (getX() <= 0 || getX() >= rightBound) {
+                        if (getX() < 0) {
+                            setLocation(0, getY());
+                        } else if (getX() > rightBound) {
+                            setLocation(rightBound, getY());
+                        }
+                        xVel = 0;
+                    }
+                    if (getY() > groundLevel + Bomb.this.getHeight()) {
+                        setLocation(getX(), groundLevel);
+                        remove(Bomb.this);
+                        ((Timer) e.getSource()).stop();
+                        switchTeam();
+                    }
+                }
+            });
+            timer.start();
+
+        }
+    }
+    class Treasure extends GRect {
+
       public Treasure()
       {
          super(playerHeight, playerHeight);
-          this.setColor(Color.black);
+          this.setColor(Color.magenta);
           this.setFilled(true);
          double xpos = (Math.random() * (Mutiworms.this.getWidth()-50) + 1);
          move(xpos,groundLevel);
@@ -243,9 +332,15 @@ public class Mutiworms extends GraphicsProgram {
         return isRed;
       }
       
-      public void changeHP(int deltaHP)
+      public int changeHP(int deltaHP)
       {
          health = health + deltaHP;
+          if (health <= 0) {
+              return 1;
+          }
+          else {
+              return 0;
+          }
       }
       public void shootThis(int xMag, int yMag) {
 
@@ -306,6 +401,7 @@ public class Mutiworms extends GraphicsProgram {
       private boolean exists = false;
       private GLine aimer;
       private Shootable selected;
+       private boolean shooting = false;
       public void mousePressed(MouseEvent event) 
       {
           if(event.getButton() == 1)
@@ -317,48 +413,74 @@ public class Mutiworms extends GraphicsProgram {
       } //get selection if right click 
       public void mouseReleased(MouseEvent event) 
       {
-         if(event.getButton() == 1)
-         {
-            tracking = false;
-            exists = false;
-            if ( aimer!= null)
-            {
-               remove(aimer);
-            }
-            finalX = event.getX();
-            finalY = event.getY();
-            //Java doesn't use traditional coordinate system, invert the y magnitude to get actual displacement
-            //However, we want the opposite of the magnitudes for launch speeds (act like a slingshot, so init - final)
-            xMag = initX - finalX;
-            yMag = -1 * (initY - finalY);
-            try {
-                selected.shootThis(xMag, yMag);
-                selected = null;
-            } catch (NullPointerException e) {
-                JOptionPane.showMessageDialog(null ,"No object was selected");
-            }
+
+          if(event.getButton() == 1)
+          {
+              tracking = false;
+              exists = false;
+              if ( aimer!= null)
+              {
+                  remove(aimer);
+              }
+              finalX = event.getX();
+              finalY = event.getY();
+              //Java doesn't use traditional coordinate system, invert the y magnitude to get actual displacement
+              //However, we want the opposite of the magnitudes for launch speeds (act like a slingshot, so init - final)
+              xMag = initX - finalX;
+              yMag = -1 * (initY - finalY);
+              if(!shooting)
+              {
+                  try {
+                      selected.shootThis(xMag, yMag);
+                      selected = null;
+                  } catch (NullPointerException e) {
+                      JOptionPane.showMessageDialog(null ,"No object was selected");
+                  }
+              }
+              if(shooting)
+              {
+                  try {
+                      shooting = false;
+                      Bomb shot = new Bomb((Person)selected);
+                      shot.setColor(Color.black);
+                      shot.setFilled(true);
+                      shot.shootThis(xMag, yMag);
+                      ((GRect) (selected)).setFilled(false);
+                      selected = null;
+                  }
+                  catch (NullPointerException e) {
+                      JOptionPane.showMessageDialog(null ,"No object was selected");
+                  }
+              }
          }
 
       } //gets final x and y pos of mouse and calls shoot method
       public void mouseClicked(MouseEvent event) {
           if (event.getButton() == 3) //r click
           {
-              if (selected != null) {
+              if (selected != null && shooting == false) {
+                  if (((Shootable) (getElementAt((double) event.getX(), (double) event.getY()))).getTeam() == redTurn && selected == ((Shootable) (getElementAt((double) event.getX(), (double) event.getY())))) {
+                      ((GRect) (selected)).setFilled(false);
+                      shooting = true;
+                      System.out.println("switching to bomb");
+                  }
+
                   ((GRect) (selected)).setFilled(false);
                   selected = null;
+              } else if (shooting == true) {
+                  System.out.println("selecting an object");
+                  shooting = false;
               }
               //Checks whether the object belongs to the team currently shooting/moving
               try {
-                  if (((Shootable) (getElementAt((double) event.getX(), (double) event.getY()))).getTeam() == redTurn && ((Shootable) (getElementAt((double) event.getX(), (double) event.getY()))) == selected) {
-                      System.out.println("s");   
-                  }
-                  else if (((Shootable) (getElementAt((double) event.getX(), (double) event.getY()))).getTeam() == redTurn) {
+                  if (((Shootable) (getElementAt((double) event.getX(), (double) event.getY()))).getTeam() == redTurn) {
                       selected = (Shootable) (getElementAt((double) event.getX(), (double) event.getY()));
                       ((GRect) (selected)).setFilled(true);
                   } else {
                       JOptionPane.showMessageDialog(null, "This object does not belong to your team!");
                   }
               } catch (Exception e) {}
+
           }
       }
       public void mouseEntered(MouseEvent event) {}
